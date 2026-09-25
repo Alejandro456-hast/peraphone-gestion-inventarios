@@ -5,7 +5,6 @@
      * Reglas cubiertas: RN-001 a RN-009
      */
     import { onMount } from 'svelte';
-    import BarraNavegacion from '$lib/componentes/BarraNavegacion.svelte';
     import InsigniaEstado from '$lib/componentes/InsigniaEstado.svelte';
     import TarjetaMetrica from '$lib/componentes/TarjetaMetrica.svelte';
     import ModalFormulario from '$lib/componentes/ModalFormulario.svelte';
@@ -185,6 +184,36 @@
         }
     }
 
+    async function actualizarEstado(id_celular, nuevo_estado) {
+        let msg = nuevo_estado === 'disponible' 
+            ? '¿Confirmar recepción del equipo en almacén?' 
+            : '¿Enviar este equipo defectuoso al Laboratorio Técnico?';
+            
+        if (!confirm(msg)) return;
+
+        try {
+            const respuesta = await fetch('/api/inventario_equipos', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    id_celular,
+                    nuevo_estado,
+                    id_usuario_responsable: usuarioSesion?.id_usuario || 1
+                })
+            });
+
+            const resultado = await respuesta.json();
+            if (resultado.exito) {
+                mostrarAlerta('exito', resultado.mensaje);
+                cargarInventario();
+            } else {
+                mostrarAlerta('error', resultado.mensaje);
+            }
+        } catch (e) {
+            mostrarAlerta('error', 'Error al intentar actualizar el estado del equipo.');
+        }
+    }
+
     function abrirModalVenta(celular) {
         datosVenta = {
             id_celular: celular.id_celular,
@@ -228,10 +257,7 @@
     <title>Gestión de Celulares | Peraphone</title>
 </svelte:head>
 
-<div class="min-h-screen bg-slate-100 flex flex-col font-sans">
-    <BarraNavegacion />
-
-    <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
+<div class="space-y-8">
         <!-- Encabezado de la Vista -->
         <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <div>
@@ -450,6 +476,29 @@
                                                 </button>
                                             {/if}
 
+                                            <!-- Acciones de Inventario -->
+                                            {#if usuarioSesion?.permisos?.puede_registrar_inventario}
+                                                {#if celular.estado_equipo === 'pendiente_recepcion'}
+                                                    <button 
+                                                        type="button" 
+                                                        onclick={() => actualizarEstado(celular.id_celular, 'disponible')}
+                                                        class="px-2.5 py-1 text-xs font-semibold rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white transition-colors"
+                                                        title="Confirmar llegada física al almacén"
+                                                    >
+                                                        📦 Confirmar
+                                                    </button>
+                                                {:else if celular.estado_equipo === 'disponible'}
+                                                    <button 
+                                                        type="button" 
+                                                        onclick={() => actualizarEstado(celular.id_celular, 'en_revision')}
+                                                        class="px-2.5 py-1 text-xs font-semibold rounded-lg bg-amber-600 hover:bg-amber-500 text-white transition-colors"
+                                                        title="Enviar a Laboratorio Técnico (Defectuoso)"
+                                                    >
+                                                        🔧 A Revisión
+                                                    </button>
+                                                {/if}
+                                            {/if}
+
                                             <!-- Dictamen Técnico si está en revisión: Solo Servicio Técnico o Administrador (RN-002, RN-008) -->
                                             {#if celular.estado_equipo === 'en_revision' && usuarioSesion?.permisos?.puede_evaluar_tecnico}
                                                 <button 
@@ -482,9 +531,7 @@
                 </table>
             </div>
         </div>
-    </main>
 </div>
-
 <!-- Modal para Registrar Nuevo Celular (RN-003, RN-004, RN-005) -->
 <ModalFormulario 
     abierto={modalRegistroAbierto}

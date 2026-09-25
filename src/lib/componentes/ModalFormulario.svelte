@@ -7,6 +7,7 @@
 
     let { 
         abierto = false, 
+        idLotePredeterminado = '',
         alCerrar = () => {}, 
         alGuardarExitoso = () => {} 
     } = $props();
@@ -25,7 +26,14 @@
         estado_equipo: 'disponible',
         precio_costo: '',
         precio_venta: '',
-        id_lote: ''
+        id_lote: idLotePredeterminado
+    });
+    
+    // Si cambia el prop mientras el componente está montado (Runes)
+    $effect(() => {
+        if (abierto && idLotePredeterminado && !nuevoEquipo.numero_imei) {
+            nuevoEquipo.id_lote = idLotePredeterminado;
+        }
     });
 
     onMount(async () => {
@@ -245,6 +253,7 @@
                         >
                             <option value="disponible">Disponible (Para Venta Inmediata)</option>
                             <option value="pendiente_recepcion">Pendiente de Recepción</option>
+                            <option value="en_revision">Defectuoso (Enviar a Servicio Técnico)</option>
                         </select>
                     </div>
 

@@ -307,3 +307,46 @@ export async function POST({ request }) {
         );
     }
 }
+
+
+export async function PUT({ request }) {
+    try {
+        const { id_celular, nuevo_estado, id_usuario_responsable } = await request.json();
+        if (!id_celular || !nuevo_estado) return json({ exito: false, mensaje: 'Faltan datos.' }, { status: 400 });
+        if (!ESTADOS_PERMITIDOS.includes(nuevo_estado)) return json({ exito: false, mensaje: 'Estado inválido.' }, { status: 400 });
+        
+        const [usuario] = await ejecutarConsulta('SELECT r.nombre_rol FROM usuarios u JOIN roles r ON u.id_rol = r.id_rol WHERE u.id_usuario = ?', [Number(id_usuario_responsable)]);
+        if (!usuario || (usuario.nombre_rol !== 'Administrador' && usuario.nombre_rol !== 'Personal de Inventario')) {
+            return json({ exito: false, mensaje: 'Acceso denegado.' }, { status: 403 });
+        }
+
+        const [equipoActual] = await ejecutarConsulta('SELECT estado_equipo, numero_imei FROM celulares WHERE id_celular = ?', [Number(id_celular)]);
+        if (!equipoActual) return json({ exito: false, mensaje: 'Celular no encontrado.' }, { status: 404 });
+
+        await ejecutarTransaccion(async (conexion) => {
+            await conexion.execute('UPDATE celulares SET estado_equipo = ? WHERE id_celular = ?', [nuevo_estado, Number(id_celular)]);
+            let motivo = 'CAMBIO_ESTADO_MANUAL';
+            let tipoMov = 'AJUSTE';
+            let origen = 'Almacén';
+            let destino = 'Almacén';
+            if (nuevo_estado === 'disponible' && equipoActual.estado_equipo === 'pendiente_recepcion') {
+                motivo = 'CONFIRMACION_RECEPCION';
+                tipoMov = 'ENTRADA';
+                origen = 'Proveedor/Tránsito';
+                destino = 'Almacén Central';
+            } else if (nuevo_estado === 'en_revision') {
+                motivo = 'ENVIO_A_REVISION_TECNICA';
+                destino = 'Laboratorio Técnico';
+            }
+            await conexion.execute(
+                `INSERT INTO movimientos (id_celular, tipo_movimiento, motivo, id_usuario_responsable, ubicacion_origen, ubicacion_destino, es_automatico) VALUES (?, ?, ?, ?, ?, ?, TRUE)`,
+                [Number(id_celular), tipoMov, motivo, Number(id_usuario_responsable), origen, destino]
+            );
+        });
+
+        return json({ exito: true, mensaje: `Estado actualizado a ${nuevo_estado} exitosamente.` });
+    } catch (e) {
+        console.error(e);
+        return json({ exito: false, mensaje: 'Error interno.', detalle: e.message }, { status: 500 });
+    }
+}

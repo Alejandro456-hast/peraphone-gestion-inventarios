@@ -102,9 +102,9 @@
                         Usuario o Correo Electrónico
                     </label>
                     <div class="relative">
-                        <input 
+                        <input
                             id="campo_usuario"
-                            type="text" 
+                            type="text"
                             bind:value={nombreUsuario}
                             required
                             placeholder="admin, mariana.inventario, etc."
@@ -118,9 +118,9 @@
                     <label for="campo_clave" class="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2">
                         Contraseña
                     </label>
-                    <input 
+                    <input
                         id="campo_clave"
-                        type="password" 
+                        type="password"
                         bind:value={contrasena}
                         required
                         placeholder="••••••••"
@@ -129,8 +129,8 @@
                 </div>
 
                 <!-- Botón de Ingreso -->
-                <button 
-                    type="submit" 
+                <button
+                    type="submit"
                     disabled={cargando}
                     class="w-full flex justify-center items-center py-3.5 px-4 rounded-xl text-sm font-bold text-white bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-cyan-500 shadow-lg shadow-cyan-500/25 transition-all disabled:opacity-50"
                 >
@@ -149,7 +149,7 @@
                     Cuentas de Prueba Preconfiguradas (RN-002):
                 </p>
                 <div class="grid grid-cols-2 gap-2">
-                    <button 
+                    <button
                         type="button"
                         onclick={() => cargarCredencialesDemo('admin', 'admin123')}
                         class="text-left p-2 rounded-lg bg-slate-800/60 hover:bg-slate-800 border border-slate-700/60 transition-colors"
@@ -158,7 +158,7 @@
                         <p class="text-[10px] text-slate-400">admin / admin123</p>
                     </button>
 
-                    <button 
+                    <button
                         type="button"
                         onclick={() => cargarCredencialesDemo('mariana.inventario', 'inventario123')}
                         class="text-left p-2 rounded-lg bg-slate-800/60 hover:bg-slate-800 border border-slate-700/60 transition-colors"
@@ -167,7 +167,7 @@
                         <p class="text-[10px] text-slate-400">mariana.inventario</p>
                     </button>
 
-                    <button 
+                    <button
                         type="button"
                         onclick={() => cargarCredencialesDemo('jorge.tecnico', 'tecnico123')}
                         class="text-left p-2 rounded-lg bg-slate-800/60 hover:bg-slate-800 border border-slate-700/60 transition-colors"
@@ -176,7 +176,7 @@
                         <p class="text-[10px] text-slate-400">jorge.tecnico</p>
                     </button>
 
-                    <button 
+                    <button
                         type="button"
                         onclick={() => cargarCredencialesDemo('carlos.vendedor', 'vendedor123')}
                         class="text-left p-2 rounded-lg bg-slate-800/60 hover:bg-slate-800 border border-slate-700/60 transition-colors"
@@ -197,9 +197,9 @@
     </div>
 </div>
 
-<NotificacionAlerta 
-    visible={alerta.visible} 
-    tipo={alerta.tipo} 
-    mensaje={alerta.mensaje} 
-    alCerrar={() => alerta.visible = false} 
+<NotificacionAlerta
+    visible={alerta.visible}
+    tipo={alerta.tipo}
+    mensaje={alerta.mensaje}
+    alCerrar={() => alerta.visible = false}
 />
