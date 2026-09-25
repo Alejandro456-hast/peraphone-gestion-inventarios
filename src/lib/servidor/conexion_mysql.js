@@ -8,14 +8,15 @@
  */
 
 import mysql from 'mysql2/promise';
+import { env } from '$env/dynamic/private';
 
 // Configuración de conexión adaptada para XAMPP con variables de entorno o valores por defecto
 const configuracionBD = {
-    host: process.env.DB_HOST || 'localhost',
-    port: Number(process.env.DB_PUERTO) || 3306,
-    user: process.env.DB_USUARIO || 'root',
-    password: process.env.DB_CONTRASENA || '',
-    database: process.env.DB_NOMBRE || 'peraphone_db',
+    host: env.DB_HOST || 'localhost',
+    port: Number(env.DB_PUERTO) || 3306,
+    user: env.DB_USUARIO || 'root',
+    password: env.DB_CONTRASENA || '',
+    database: env.DB_NOMBRE || 'peraphone_db',
     waitForConnections: true,
     connectionLimit: 10,
     maxIdle: 10,
