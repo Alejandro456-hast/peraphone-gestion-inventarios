@@ -12,7 +12,8 @@
         Wrench, 
         Users, 
         LogOut,
-        Boxes
+        Boxes,
+        Receipt
     } from '@lucide/svelte';
 
     let usuarioActual = $state(null);
@@ -53,6 +54,12 @@
                 titulo: 'Punto de Venta', 
                 ruta: '/ventas', 
                 icono: ShoppingCart,
+                mostrar: permisos.puede_vender || permisos.puede_ver_todo // Vendedor y Admin
+            },
+            { 
+                titulo: 'Historial de Ventas', 
+                ruta: '/historial_ventas', 
+                icono: Receipt,
                 mostrar: permisos.puede_vender || permisos.puede_ver_todo // Vendedor y Admin
             },
             { 

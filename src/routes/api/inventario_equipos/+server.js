@@ -159,138 +159,126 @@ export async function POST({ request }) {
             precio_costo = 0.00,
             precio_venta = 0.00,
             id_lote = null,
-            id_usuario_responsable = 1 // Por defecto o usuario en sesión
+            id_usuario_responsable = 1, // Por defecto o usuario en sesión
+            cantidad = 1
         } = cuerpo;
 
         // RN-003: Validación estricta de campos mínimos obligatorios
-        if (!numero_imei || !marca || !modelo) {
+        if (!marca || !modelo) {
             return json(
                 {
                     exito: false,
-                    mensaje: 'Faltan datos obligatorios mínimos: IMEI, marca y modelo son requeridos.'
+                    mensaje: 'Faltan datos obligatorios mínimos: marca y modelo son requeridos.'
                 },
                 { status: 400 }
             );
         }
 
-        // RN-003: Validación de formato de IMEI (15 dígitos numéricos)
-        const regexImei = /^[0-9]{15}$/;
-        const imeiLimpio = String(numero_imei).trim();
-        if (!regexImei.test(imeiLimpio)) {
-            return json(
-                {
-                    exito: false,
-                    mensaje: `El IMEI '${imeiLimpio}' es inválido. Debe contener exactamente 15 dígitos numéricos.`
-                },
-                { status: 400 }
+        // RN-003: Validación de formato de IMEI solo si la cantidad es 1
+        let imeiLimpio = '';
+        if (cantidad === 1) {
+            if (!numero_imei) {
+                return json({ exito: false, mensaje: 'El IMEI es obligatorio para registros individuales.' }, { status: 400 });
+            }
+            const regexImei = /^[0-9]{15}$/;
+            imeiLimpio = String(numero_imei).trim();
+            if (!regexImei.test(imeiLimpio)) {
+                return json({ exito: false, mensaje: `El IMEI '${imeiLimpio}' es inválido.` }, { status: 400 });
+            }
+
+            // Verificación de IMEI duplicado
+            const [imeiExistente] = await ejecutarConsulta(
+                'SELECT id_celular FROM celulares WHERE numero_imei = ? LIMIT 1',
+                [imeiLimpio]
             );
+
+            if (imeiExistente) {
+                return json({ exito: false, mensaje: `El IMEI ${imeiLimpio} ya está registrado.` }, { status: 409 });
+            }
         }
 
         // RN-003: Validación de estado válido
         if (!ESTADOS_PERMITIDOS.includes(estado_equipo)) {
-            return json(
-                {
-                    exito: false,
-                    mensaje: `Estado no permitido. Debe ser uno de: ${ESTADOS_PERMITIDOS.join(', ')}`
-                },
-                { status: 400 }
-            );
+            return json({ exito: false, mensaje: `Estado no permitido.` }, { status: 400 });
         }
 
-        // Verificación de IMEI duplicado
-        const [imeiExistente] = await ejecutarConsulta(
-            'SELECT id_celular FROM celulares WHERE numero_imei = ? LIMIT 1',
-            [imeiLimpio]
-        );
-
-        if (imeiExistente) {
-            return json(
-                {
-                    exito: false,
-                    mensaje: `El IMEI ${imeiLimpio} ya está registrado en el inventario de Peraphone.`
-                },
-                { status: 409 }
-            );
-        }
-
-        // RN-002: Restringir acceso según funciones (Inventario y Administrador)
+        // RN-002: Restringir acceso según funciones
         const [usuarioResponsable] = await ejecutarConsulta(
             'SELECT u.id_usuario, r.nombre_rol FROM usuarios u INNER JOIN roles r ON u.id_rol = r.id_rol WHERE u.id_usuario = ?',
             [Number(id_usuario_responsable)]
         );
 
         if (!usuarioResponsable || (usuarioResponsable.nombre_rol !== 'Personal de Inventario' && usuarioResponsable.nombre_rol !== 'Administrador')) {
-            return json(
-                {
-                    exito: false,
-                    mensaje: 'Acceso denegado (RN-002): Solo el Personal de Inventario o Administrador puede registrar nuevos celulares en el sistema.'
-                },
-                { status: 403 }
-            );
+            return json({ exito: false, mensaje: 'Acceso denegado.' }, { status: 403 });
         }
 
-        // RN-004: Si viene id_lote, verificar que exista
+        // RN-004: Lote
         let loteValido = null;
         if (id_lote && id_lote !== 'null' && id_lote !== '') {
             const [loteEncontrado] = await ejecutarConsulta(
                 'SELECT id_lote, codigo_lote FROM lotes WHERE id_lote = ? LIMIT 1',
                 [Number(id_lote)]
             );
-            if (loteEncontrado) {
-                loteValido = loteEncontrado.id_lote;
-            }
+            if (loteEncontrado) loteValido = loteEncontrado.id_lote;
         }
 
-        // RN-005: Transacción Atómica para inserción en `celulares` y registro en `movimientos`
+        // Transacción Atómica
         const resultadoInsercion = await ejecutarTransaccion(async (conexion) => {
-            // 1. Insertar el celular
-            const [resultadoCelular] = await conexion.execute(
-                `INSERT INTO celulares (
-                    id_lote, numero_imei, marca, modelo, color, 
-                    capacidad_almacenamiento, estado_equipo, precio_costo, precio_venta
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-                [
-                    loteValido,
-                    imeiLimpio,
-                    marca.trim(),
-                    modelo.trim(),
-                    color.trim(),
-                    capacidad_almacenamiento.trim(),
-                    estado_equipo,
-                    Number(precio_costo) || 0.00,
-                    Number(precio_venta) || 0.00
-                ]
-            );
+            let celularesInsertados = [];
 
-            const nuevoIdCelular = resultadoCelular.insertId;
+            for (let i = 0; i < cantidad; i++) {
+                let currentImei = imeiLimpio;
+                
+                if (cantidad > 1) {
+                    // Generar un IMEI aleatorio de 15 dígitos empezando con 86
+                    currentImei = '86' + Math.floor(1000000000000 + Math.random() * 9000000000000).toString();
+                }
 
-            // 2. Registrar movimiento de entrada automático e inmutable (RN-005)
-            const motivoMovimiento = loteValido 
-                ? `RECEPCION_INICIAL_LOTE_${loteValido}` 
-                : 'RECEPCION_INDIVIDUAL_DIRECTA';
+                const [resultadoCelular] = await conexion.execute(
+                    `INSERT INTO celulares (
+                        id_lote, numero_imei, marca, modelo, color, 
+                        capacidad_almacenamiento, estado_equipo, precio_costo, precio_venta
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                    [
+                        loteValido,
+                        currentImei,
+                        marca.trim(),
+                        modelo.trim(),
+                        color.trim(),
+                        capacidad_almacenamiento.trim(),
+                        estado_equipo,
+                        Number(precio_costo) || 0.00,
+                        Number(precio_venta) || 0.00
+                    ]
+                );
 
-            await conexion.execute(
-                `INSERT INTO movimientos (
-                    id_celular, tipo_movimiento, motivo, id_usuario_responsable,
-                    ubicacion_origen, ubicacion_destino, es_automatico
-                ) VALUES (?, 'ENTRADA', ?, ?, 'Proveedor Externo', 'Almacén Central Peraphone', TRUE)`,
-                [
-                    nuevoIdCelular,
-                    motivoMovimiento,
-                    Number(id_usuario_responsable) || 1
-                ]
-            );
+                const nuevoIdCelular = resultadoCelular.insertId;
+                const motivoMovimiento = loteValido ? `RECEPCION_INICIAL_LOTE_${loteValido}` : 'RECEPCION_INDIVIDUAL_DIRECTA';
 
-            return {
-                id_celular: nuevoIdCelular,
-                numero_imei: imeiLimpio
-            };
+                await conexion.execute(
+                    `INSERT INTO movimientos (
+                        id_celular, tipo_movimiento, motivo, id_usuario_responsable,
+                        ubicacion_origen, ubicacion_destino, es_automatico
+                    ) VALUES (?, 'ENTRADA', ?, ?, 'Proveedor Externo', 'Almacén Central Peraphone', TRUE)`,
+                    [
+                        nuevoIdCelular,
+                        motivoMovimiento,
+                        Number(id_usuario_responsable) || 1
+                    ]
+                );
+
+                celularesInsertados.push({ id_celular: nuevoIdCelular, numero_imei: currentImei });
+            }
+
+            return celularesInsertados;
         });
 
         return json(
             {
                 exito: true,
-                mensaje: `Equipo ${marca} ${modelo} (IMEI: ${imeiLimpio}) registrado exitosamente con movimiento trazado.`,
+                mensaje: cantidad > 1 
+                    ? `Se registraron ${cantidad} equipos ${marca} ${modelo} exitosamente.`
+                    : `Equipo ${marca} ${modelo} (IMEI: ${imeiLimpio}) registrado exitosamente con movimiento trazado.`,
                 datos: resultadoInsercion
             },
             { status: 201 }

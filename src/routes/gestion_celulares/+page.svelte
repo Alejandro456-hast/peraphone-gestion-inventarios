@@ -10,6 +10,7 @@
     import ModalFormulario from '$lib/componentes/ModalFormulario.svelte';
     import ModalTrazabilidad from '$lib/componentes/ModalTrazabilidad.svelte';
     import NotificacionAlerta from '$lib/componentes/NotificacionAlerta.svelte';
+    import { Download } from '@lucide/svelte';
 
     // Estados reactivos (Svelte 5 Runes)
     let listaCelulares = $state([]);
@@ -61,6 +62,31 @@
     // Alertas globales
     let alerta = $state({ visible: false, tipo: 'exito', mensaje: '' });
     let usuarioSesion = $state(null);
+
+    // Estado para agrupación por lote
+    let agruparPorLote = $state(false);
+    let lotesExpandidos = $state(new Set());
+
+    function toggleLote(nombreLote) {
+        const nuevoSet = new Set(lotesExpandidos);
+        if (nuevoSet.has(nombreLote)) {
+            nuevoSet.delete(nombreLote);
+        } else {
+            nuevoSet.add(nombreLote);
+        }
+        lotesExpandidos = nuevoSet;
+    }
+
+    let inventarioAgrupado = $derived.by(() => {
+        if (!agruparPorLote) return [];
+        const grupos = {};
+        for (const cel of listaCelulares) {
+            const clave = cel.codigo_lote || 'Equipos Individuales (Sin Lote)';
+            if (!grupos[clave]) grupos[clave] = { nombre: clave, celulares: [] };
+            grupos[clave].celulares.push(cel);
+        }
+        return Object.values(grupos);
+    });
 
     onMount(() => {
         // Verificar sesión activa
@@ -119,6 +145,37 @@
             motivo_devolucion: ''
         };
         modalDevolucionAbierto = true;
+    }
+
+    async function descargarExcel() {
+        try {
+            const xlsx = await import('xlsx');
+            
+            // Transform data for Excel
+            const datosParaExcel = listaCelulares.map(cel => ({
+                'ID': cel.id_celular,
+                'Lote': cel.numero_lote || 'N/A',
+                'IMEI': cel.numero_imei,
+                'Marca': cel.marca,
+                'Modelo': cel.modelo,
+                'Costo ($)': cel.precio_compra,
+                'Venta ($)': cel.precio_venta,
+                'Estado': cel.estado_equipo.toUpperCase()
+            }));
+
+            // Create workbook
+            const worksheet = xlsx.utils.json_to_sheet(datosParaExcel);
+            const workbook = xlsx.utils.book_new();
+            xlsx.utils.book_append_sheet(workbook, worksheet, 'Inventario');
+
+            // Download
+            xlsx.writeFile(workbook, `Inventario_Peraphone_${new Date().toLocaleDateString('es-ES').replace(/\//g, '-')}.xlsx`);
+            
+            mostrarAlerta('exito', 'Excel generado y descargado correctamente.');
+        } catch (error) {
+            console.error(error);
+            mostrarAlerta('error', 'Hubo un problema al generar el archivo Excel.');
+        }
     }
 
     async function procesarDevolucion(e) {
@@ -269,25 +326,37 @@
                 </p>
             </div>
 
-            <!-- Botón de Registro Rápido: Solo visible para Personal de Inventario o Administrador (RN-002) -->
-            {#if usuarioSesion?.permisos?.puede_registrar_inventario}
+            <div class="flex items-center gap-3">
+                <!-- Botón de Exportar a Excel -->
                 <button 
                     type="button"
-                    onclick={() => modalRegistroAbierto = true}
-                    class="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white font-bold text-sm shadow-md shadow-cyan-600/30 transition-all cursor-pointer"
+                    onclick={descargarExcel}
+                    class="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-400 font-bold text-sm hover:bg-emerald-200 dark:hover:bg-emerald-900/60 transition-colors cursor-pointer"
                 >
-                    <span class="text-base font-black">+</span>
-                    <span>Registrar Nuevo Celular</span>
+                    <Download size={18} />
+                    <span class="hidden sm:inline">Exportar Excel</span>
                 </button>
-            {:else if usuarioSesion?.nombre_rol === 'Vendedor'}
-                <div class="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-semibold">
-                    <span>🏷️ Vista de Ventas: Consulta de stock disponible</span>
-                </div>
-            {:else if usuarioSesion?.nombre_rol === 'Servicio Técnico'}
-                <div class="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-xs font-semibold">
-                    <span>🔧 Vista de Servicio Técnico: Diagnóstico de retornos</span>
-                </div>
-            {/if}
+
+                <!-- Botón de Registro Rápido: Solo visible para Personal de Inventario o Administrador (RN-002) -->
+                {#if usuarioSesion?.permisos?.puede_registrar_inventario}
+                    <button 
+                        type="button"
+                        onclick={() => modalRegistroAbierto = true}
+                        class="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white font-bold text-sm shadow-md shadow-cyan-600/30 transition-all cursor-pointer"
+                    >
+                        <span class="text-base font-black">+</span>
+                        <span>Registrar Nuevo Celular</span>
+                    </button>
+                {:else if usuarioSesion?.nombre_rol === 'Vendedor'}
+                    <div class="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-semibold">
+                        <span>🏷️ Vista de Ventas: Consulta de stock disponible</span>
+                    </div>
+                {:else if usuarioSesion?.nombre_rol === 'Servicio Técnico'}
+                    <div class="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-xs font-semibold">
+                        <span>🔧 Vista de Servicio Técnico: Diagnóstico de retornos</span>
+                    </div>
+                {/if}
+            </div>
         </div>
 
         <!-- Tarjetas de Métricas Ejecutivas (KPIs Peraphone) -->
@@ -380,6 +449,16 @@
                     >
                         Vendidos
                     </button>
+                    
+                    <div class="h-6 w-px bg-slate-200 mx-2 hidden md:block"></div>
+                    
+                    <button 
+                        type="button" 
+                        onclick={() => agruparPorLote = !agruparPorLote}
+                        class="px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-2 transition-colors {agruparPorLote ? 'bg-cyan-100 text-cyan-800 border border-cyan-200' : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'}"
+                    >
+                        📦 Agrupar por Lote
+                    </button>
                 </div>
             </div>
 
@@ -397,6 +476,121 @@
                             <th class="py-3 px-4 text-right">Acciones</th>
                         </tr>
                     </thead>
+                    {#snippet filaCelular(celular)}
+                        <tr class="hover:bg-slate-50/80 transition-colors">
+                            <!-- IMEI -->
+                            <td class="py-3.5 px-4 font-mono font-bold text-slate-800 text-xs tracking-wider">
+                                {celular.numero_imei}
+                            </td>
+
+                            <!-- Marca y Modelo -->
+                            <td class="py-3.5 px-4">
+                                <p class="font-bold text-slate-900">{celular.marca} {celular.modelo}</p>
+                                <p class="text-[11px] text-slate-400">Ingreso: {celular.fecha_ingreso ? celular.fecha_ingreso.slice(0, 10) : 'N/A'}</p>
+                            </td>
+
+                            <!-- Lote -->
+                            <td class="py-3.5 px-4">
+                                {#if celular.codigo_lote}
+                                    <span class="inline-block px-2 py-0.5 rounded text-[11px] font-semibold bg-cyan-50 text-cyan-800 border border-cyan-200">
+                                        📦 {celular.codigo_lote}
+                                    </span>
+                                {:else}
+                                    <span class="text-xs text-slate-400 italic">Individual (Sin Lote)</span>
+                                {/if}
+                            </td>
+
+                            <!-- Color y Memoria -->
+                            <td class="py-3.5 px-4 text-xs text-slate-600">
+                                {celular.color} • {celular.capacidad_almacenamiento}
+                            </td>
+
+                            <!-- Precio Venta -->
+                            <td class="py-3.5 px-4 font-bold text-slate-900 text-xs">
+                                ${Number(celular.precio_venta).toFixed(2)}
+                            </td>
+
+                            <!-- Estado del Equipo -->
+                            <td class="py-3.5 px-4">
+                                <InsigniaEstado estado={celular.estado_equipo} />
+                            </td>
+
+                            <!-- Acciones Operativas -->
+                            <td class="py-3.5 px-4 text-right">
+                                <div class="inline-flex items-center gap-1.5">
+                                    <!-- Ver Trazabilidad Inmutable (RN-009) -->
+                                    <button 
+                                        type="button" 
+                                        onclick={() => abrirTrazabilidad(celular.numero_imei)}
+                                        class="px-2.5 py-1 text-xs font-semibold rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 transition-colors"
+                                        title="Ver historial inmutable (RN-009)"
+                                    >
+                                        📜 Historial
+                                    </button>
+
+                                    <!-- Venta si está disponible: Solo Vendedor o Administrador (RN-002, RN-006) -->
+                                    {#if celular.estado_equipo === 'disponible' && usuarioSesion?.permisos?.puede_vender}
+                                        <button 
+                                            type="button" 
+                                            onclick={() => abrirModalVenta(celular)}
+                                            class="px-2.5 py-1 text-xs font-semibold rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white transition-colors"
+                                            title="Registrar venta y descontar stock (RN-006)"
+                                        >
+                                            🏷️ Vender
+                                        </button>
+                                    {/if}
+
+                                    <!-- Acciones de Inventario -->
+                                    {#if usuarioSesion?.permisos?.puede_registrar_inventario}
+                                        {#if celular.estado_equipo === 'pendiente_recepcion'}
+                                            <button 
+                                                type="button" 
+                                                onclick={() => actualizarEstado(celular.id_celular, 'disponible')}
+                                                class="px-2.5 py-1 text-xs font-semibold rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white transition-colors"
+                                                title="Confirmar llegada física al almacén"
+                                            >
+                                                📦 Confirmar
+                                            </button>
+                                        {:else if celular.estado_equipo === 'disponible'}
+                                            <button 
+                                                type="button" 
+                                                onclick={() => actualizarEstado(celular.id_celular, 'en_revision')}
+                                                class="px-2.5 py-1 text-xs font-semibold rounded-lg bg-amber-600 hover:bg-amber-500 text-white transition-colors"
+                                                title="Enviar a Laboratorio Técnico (Defectuoso)"
+                                            >
+                                                🔧 A Revisión
+                                            </button>
+                                        {/if}
+                                    {/if}
+
+                                    <!-- Dictamen Técnico si está en revisión: Solo Servicio Técnico o Administrador (RN-002, RN-008) -->
+                                    {#if celular.estado_equipo === 'en_revision' && usuarioSesion?.permisos?.puede_evaluar_tecnico}
+                                        <button 
+                                            type="button" 
+                                            onclick={() => abrirModalEvaluacion(celular)}
+                                            class="px-2.5 py-1 text-xs font-semibold rounded-lg bg-amber-600 hover:bg-amber-500 text-white transition-colors"
+                                            title="Emitir dictamen de servicio técnico (RN-008)"
+                                        >
+                                            🔧 Evaluar
+                                        </button>
+                                    {/if}
+
+                                    <!-- Devolución a revisión: Solo si no está en revisión ni desechado (RN-007) -->
+                                    {#if celular.estado_equipo !== 'en_revision' && celular.estado_equipo !== 'desechado' && (usuarioSesion?.permisos?.puede_vender || usuarioSesion?.permisos?.puede_ver_todo)}
+                                        <button 
+                                            type="button" 
+                                            onclick={() => abrirModalDevolucion(celular)}
+                                            class="px-2.5 py-1 text-xs font-semibold rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 transition-colors"
+                                            title="Registrar devolución a revisión (RN-007)"
+                                        >
+                                            ↩️ Devolver
+                                        </button>
+                                    {/if}
+                                </div>
+                            </td>
+                        </tr>
+                    {/snippet}
+
                     <tbody class="divide-y divide-slate-100">
                         {#if cargando}
                             <tr>
@@ -411,120 +605,30 @@
                                     No se encontraron celulares con los filtros especificados.
                                 </td>
                             </tr>
-                        {:else}
-                            {#each listaCelulares as celular}
-                                <tr class="hover:bg-slate-50/80 transition-colors">
-                                    <!-- IMEI -->
-                                    <td class="py-3.5 px-4 font-mono font-bold text-slate-800 text-xs tracking-wider">
-                                        {celular.numero_imei}
-                                    </td>
-
-                                    <!-- Marca y Modelo -->
-                                    <td class="py-3.5 px-4">
-                                        <p class="font-bold text-slate-900">{celular.marca} {celular.modelo}</p>
-                                        <p class="text-[11px] text-slate-400">Ingreso: {celular.fecha_ingreso ? celular.fecha_ingreso.slice(0, 10) : 'N/A'}</p>
-                                    </td>
-
-                                    <!-- Lote -->
-                                    <td class="py-3.5 px-4">
-                                        {#if celular.codigo_lote}
-                                            <span class="inline-block px-2 py-0.5 rounded text-[11px] font-semibold bg-cyan-50 text-cyan-800 border border-cyan-200">
-                                                📦 {celular.codigo_lote}
+                        {:else if agruparPorLote}
+                            {#each inventarioAgrupado as grupo}
+                                <!-- Fila Cabecera del Lote -->
+                                <tr class="bg-slate-100 hover:bg-slate-200 cursor-pointer transition-colors" onclick={() => toggleLote(grupo.nombre)}>
+                                    <td colspan="7" class="py-3 px-4 text-xs">
+                                        <div class="flex items-center gap-2">
+                                            <span class="text-sm">{lotesExpandidos.has(grupo.nombre) ? '🔽' : '▶️'}</span>
+                                            <span class="font-bold text-slate-800">{grupo.nombre}</span>
+                                            <span class="bg-slate-300 text-slate-700 px-2 py-0.5 rounded-full font-bold text-[10px]">
+                                                {grupo.celulares.length} Equipos
                                             </span>
-                                        {:else}
-                                            <span class="text-xs text-slate-400 italic">Individual (Sin Lote)</span>
-                                        {/if}
-                                    </td>
-
-                                    <!-- Color y Memoria -->
-                                    <td class="py-3.5 px-4 text-xs text-slate-600">
-                                        {celular.color} • {celular.capacidad_almacenamiento}
-                                    </td>
-
-                                    <!-- Precio Venta -->
-                                    <td class="py-3.5 px-4 font-bold text-slate-900 text-xs">
-                                        ${Number(celular.precio_venta).toFixed(2)}
-                                    </td>
-
-                                    <!-- Estado del Equipo -->
-                                    <td class="py-3.5 px-4">
-                                        <InsigniaEstado estado={celular.estado_equipo} />
-                                    </td>
-
-                                    <!-- Acciones Operativas -->
-                                    <td class="py-3.5 px-4 text-right">
-                                        <div class="inline-flex items-center gap-1.5">
-                                            <!-- Ver Trazabilidad Inmutable (RN-009) -->
-                                            <button 
-                                                type="button" 
-                                                onclick={() => abrirTrazabilidad(celular.numero_imei)}
-                                                class="px-2.5 py-1 text-xs font-semibold rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 transition-colors"
-                                                title="Ver historial inmutable (RN-009)"
-                                            >
-                                                📜 Historial
-                                            </button>
-
-                                            <!-- Venta si está disponible: Solo Vendedor o Administrador (RN-002, RN-006) -->
-                                            {#if celular.estado_equipo === 'disponible' && usuarioSesion?.permisos?.puede_vender}
-                                                <button 
-                                                    type="button" 
-                                                    onclick={() => abrirModalVenta(celular)}
-                                                    class="px-2.5 py-1 text-xs font-semibold rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white transition-colors"
-                                                    title="Registrar venta y descontar stock (RN-006)"
-                                                >
-                                                    🏷️ Vender
-                                                </button>
-                                            {/if}
-
-                                            <!-- Acciones de Inventario -->
-                                            {#if usuarioSesion?.permisos?.puede_registrar_inventario}
-                                                {#if celular.estado_equipo === 'pendiente_recepcion'}
-                                                    <button 
-                                                        type="button" 
-                                                        onclick={() => actualizarEstado(celular.id_celular, 'disponible')}
-                                                        class="px-2.5 py-1 text-xs font-semibold rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white transition-colors"
-                                                        title="Confirmar llegada física al almacén"
-                                                    >
-                                                        📦 Confirmar
-                                                    </button>
-                                                {:else if celular.estado_equipo === 'disponible'}
-                                                    <button 
-                                                        type="button" 
-                                                        onclick={() => actualizarEstado(celular.id_celular, 'en_revision')}
-                                                        class="px-2.5 py-1 text-xs font-semibold rounded-lg bg-amber-600 hover:bg-amber-500 text-white transition-colors"
-                                                        title="Enviar a Laboratorio Técnico (Defectuoso)"
-                                                    >
-                                                        🔧 A Revisión
-                                                    </button>
-                                                {/if}
-                                            {/if}
-
-                                            <!-- Dictamen Técnico si está en revisión: Solo Servicio Técnico o Administrador (RN-002, RN-008) -->
-                                            {#if celular.estado_equipo === 'en_revision' && usuarioSesion?.permisos?.puede_evaluar_tecnico}
-                                                <button 
-                                                    type="button" 
-                                                    onclick={() => abrirModalEvaluacion(celular)}
-                                                    class="px-2.5 py-1 text-xs font-semibold rounded-lg bg-amber-600 hover:bg-amber-500 text-white transition-colors"
-                                                    title="Emitir dictamen de servicio técnico (RN-008)"
-                                                >
-                                                    🔧 Evaluar
-                                                </button>
-                                            {/if}
-
-                                            <!-- Devolución a revisión: Solo si no está en revisión ni desechado (RN-007) -->
-                                            {#if celular.estado_equipo !== 'en_revision' && celular.estado_equipo !== 'desechado' && (usuarioSesion?.permisos?.puede_vender || usuarioSesion?.permisos?.puede_ver_todo)}
-                                                <button 
-                                                    type="button" 
-                                                    onclick={() => abrirModalDevolucion(celular)}
-                                                    class="px-2.5 py-1 text-xs font-semibold rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 transition-colors"
-                                                    title="Registrar devolución a revisión (RN-007)"
-                                                >
-                                                    ↩️ Devolver
-                                                </button>
-                                            {/if}
                                         </div>
                                     </td>
                                 </tr>
+                                <!-- Filas de los Celulares del Lote (si está expandido) -->
+                                {#if lotesExpandidos.has(grupo.nombre)}
+                                    {#each grupo.celulares as celular}
+                                        {@render filaCelular(celular)}
+                                    {/each}
+                                {/if}
+                            {/each}
+                        {:else}
+                            {#each listaCelulares as celular}
+                                {@render filaCelular(celular)}
                             {/each}
                         {/if}
                     </tbody>

@@ -27,10 +27,32 @@ export async function GET() {
             LIMIT 5
         `);
 
+        const ventas7Dias = await ejecutarConsulta(`
+            SELECT 
+                DATE(fecha_venta) as fecha, 
+                SUM(precio_venta_final) as total_ingresos,
+                COUNT(id_venta) as cantidad_equipos
+            FROM ventas 
+            WHERE fecha_venta >= DATE_SUB(CURRENT_DATE(), INTERVAL 6 DAY)
+            GROUP BY DATE(fecha_venta)
+            ORDER BY fecha ASC
+        `);
+
+        const alertasStock = await ejecutarConsulta(`
+            SELECT marca, modelo, COUNT(id_celular) as stock_actual
+            FROM celulares
+            WHERE estado_equipo = 'disponible'
+            GROUP BY marca, modelo
+            HAVING stock_actual <= 3
+            ORDER BY stock_actual ASC
+        `);
+
         return json({
             exito: true,
             kpis,
-            ultimosMovimientos
+            ultimosMovimientos,
+            ventas7Dias,
+            alertasStock
         });
     } catch (e) {
         return json({ exito: false, mensaje: 'Error al obtener métricas del dashboard.', detalle: e.message }, { status: 500 });

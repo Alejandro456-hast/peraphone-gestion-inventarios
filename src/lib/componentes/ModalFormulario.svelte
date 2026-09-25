@@ -16,7 +16,6 @@
     let guardando = $state(false);
     let mensajeError = $state('');
 
-    // Estado reactivo del formulario
     let nuevoEquipo = $state({
         numero_imei: '',
         marca: '',
@@ -26,7 +25,8 @@
         estado_equipo: 'disponible',
         precio_costo: '',
         precio_venta: '',
-        id_lote: idLotePredeterminado
+        id_lote: idLotePredeterminado,
+        cantidad: 1
     });
     
     // Si cambia el prop mientras el componente está montado (Runes)
@@ -52,8 +52,8 @@
         e.preventDefault();
         mensajeError = '';
 
-        // Validación de IMEI de 15 dígitos en frontend
-        if (!/^[0-9]{15}$/.test(nuevoEquipo.numero_imei.trim())) {
+        // Validación de IMEI de 15 dígitos en frontend (solo si cantidad es 1)
+        if (nuevoEquipo.cantidad === 1 && !/^[0-9]{15}$/.test(nuevoEquipo.numero_imei.trim())) {
             mensajeError = 'El IMEI debe tener exactamente 15 dígitos numéricos.';
             return;
         }
@@ -97,7 +97,8 @@
                     estado_equipo: 'disponible',
                     precio_costo: '',
                     precio_venta: '',
-                    id_lote: ''
+                    id_lote: '',
+                    cantidad: 1
                 };
                 alGuardarExitoso(resultado.mensaje);
                 alCerrar();
@@ -143,22 +144,44 @@
                 {/if}
 
                 <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <!-- IMEI (Soporte lector de código de barras) -->
+                    <!-- Cantidad a Registrar -->
                     <div class="sm:col-span-2">
-                        <label for="numero_imei" class="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
-                            Número de IMEI (15 Dígitos) *
+                        <label for="cantidad_equipos" class="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                            Cantidad a Registrar *
                         </label>
                         <input 
-                            id="numero_imei"
-                            type="text" 
-                            maxlength="15"
-                            placeholder="Ej. 863245041234567 (compatible con lector láser)"
-                            bind:value={nuevoEquipo.numero_imei}
-                            class="w-full px-4 py-2.5 rounded-xl border border-slate-300 focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 text-slate-900 font-mono text-sm tracking-wider"
+                            id="cantidad_equipos"
+                            type="number" 
+                            min="1"
+                            max="500"
+                            bind:value={nuevoEquipo.cantidad}
+                            class="w-full px-4 py-2.5 rounded-xl border border-slate-300 focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 text-slate-900 font-bold text-sm"
                             required 
                         />
-                        <span class="text-[11px] text-slate-500 mt-1 block">Compatible con pistola lectora de código de barras USB/Bluetooth.</span>
                     </div>
+
+                    <!-- IMEI (Soporte lector de código de barras) -->
+                    {#if nuevoEquipo.cantidad === 1}
+                        <div class="sm:col-span-2">
+                            <label for="numero_imei" class="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                                Número de IMEI (15 Dígitos) *
+                            </label>
+                            <input 
+                                id="numero_imei"
+                                type="text" 
+                                maxlength="15"
+                                placeholder="Ej. 863245041234567 (compatible con lector láser)"
+                                bind:value={nuevoEquipo.numero_imei}
+                                class="w-full px-4 py-2.5 rounded-xl border border-slate-300 focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 text-slate-900 font-mono text-sm tracking-wider"
+                                required 
+                            />
+                            <span class="text-[11px] text-slate-500 mt-1 block">Compatible con pistola lectora de código de barras USB/Bluetooth.</span>
+                        </div>
+                    {:else}
+                        <div class="sm:col-span-2 bg-slate-50 p-3 rounded-xl border border-slate-200 text-slate-600 text-sm">
+                            <span class="font-bold">Generación Automática:</span> Se generarán <strong>{nuevoEquipo.cantidad}</strong> IMEIs únicos aleatorios para este registro múltiple.
+                        </div>
+                    {/if}
 
                     <!-- Marca -->
                     <div>

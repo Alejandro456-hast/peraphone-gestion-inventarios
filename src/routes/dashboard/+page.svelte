@@ -1,6 +1,6 @@
 <script>
     import { onMount } from 'svelte';
-    import { BarChart3, Smartphone, Wrench, PackageSearch, Activity, CalendarDays } from '@lucide/svelte';
+    import { BarChart3, Smartphone, Wrench, PackageSearch, Activity, CalendarDays, TrendingUp, AlertTriangle } from '@lucide/svelte';
     import NotificacionAlerta from '$lib/componentes/NotificacionAlerta.svelte';
 
     let usuarioSesion = $state(null);
@@ -11,8 +11,13 @@
         movimientos_hoy: 0
     });
     let ultimosMovimientos = $state([]);
+    let ventas7Dias = $state([]);
+    let alertasStock = $state([]);
     let cargando = $state(true);
     let alerta = $state({ visible: false, tipo: 'info', mensaje: '' });
+    
+    let canvasGrafico;
+    let graficoInstancia;
 
     function mostrarAlerta(tipo, mensaje) {
         alerta = { visible: true, tipo, mensaje };
@@ -36,6 +41,10 @@
             if (data.exito) {
                 kpis = data.kpis;
                 ultimosMovimientos = data.ultimosMovimientos;
+                ventas7Dias = data.ventas7Dias || [];
+                alertasStock = data.alertasStock || [];
+                
+                setTimeout(dibujarGrafico, 100);
             } else {
                 mostrarAlerta('error', data.mensaje);
             }
@@ -44,6 +53,54 @@
         } finally {
             cargando = false;
         }
+    }
+
+    async function dibujarGrafico() {
+        if (!canvasGrafico) return;
+        const Chart = (await import('chart.js/auto')).default;
+        
+        if (graficoInstancia) {
+            graficoInstancia.destroy();
+        }
+
+        const fechas = ventas7Dias.map(v => {
+            const f = new Date(v.fecha);
+            f.setMinutes(f.getMinutes() + f.getTimezoneOffset()); // Fix UTC offset
+            return f.toLocaleDateString('es-ES', { weekday: 'short', day: 'numeric' });
+        });
+        const ingresos = ventas7Dias.map(v => Number(v.total_ingresos));
+
+        graficoInstancia = new Chart(canvasGrafico, {
+            type: 'bar',
+            data: {
+                labels: fechas,
+                datasets: [{
+                    label: 'Ingresos ($ USD)',
+                    data: ingresos,
+                    backgroundColor: 'rgba(14, 165, 233, 0.8)',
+                    borderRadius: 6,
+                    borderWidth: 0
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                return 'Ingresos: $' + context.parsed.y.toFixed(2);
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    y: { beginAtZero: true, grid: { color: 'rgba(0,0,0,0.05)' } },
+                    x: { grid: { display: false } }
+                }
+            }
+        });
     }
 </script>
 
@@ -82,6 +139,29 @@
             <div class="animate-spin rounded-full h-10 w-10 border-b-2 border-cyan-600"></div>
         </div>
     {:else}
+        <!-- Alertas de Stock Crítico -->
+        {#if alertasStock.length > 0}
+            <div class="bg-rose-50 border-l-4 border-rose-500 p-4 rounded-r-xl shadow-sm">
+                <div class="flex items-start gap-3">
+                    <div class="p-2 bg-rose-100 text-rose-600 rounded-lg">
+                        <AlertTriangle size={24} />
+                    </div>
+                    <div>
+                        <h3 class="text-rose-800 font-bold">¡Atención! Stock Crítico Detectado</h3>
+                        <p class="text-rose-600 text-sm mt-1 mb-2">Los siguientes modelos tienen 3 o menos unidades disponibles en inventario:</p>
+                        <div class="flex flex-wrap gap-2">
+                            {#each alertasStock as alertaItem}
+                                <span class="inline-flex items-center gap-1.5 px-3 py-1 bg-white border border-rose-200 text-rose-700 text-xs font-bold rounded-lg shadow-sm">
+                                    {alertaItem.marca} {alertaItem.modelo}
+                                    <span class="bg-rose-500 text-white px-1.5 py-0.5 rounded-md text-[10px]">{alertaItem.stock_actual} ud</span>
+                                </span>
+                            {/each}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        {/if}
+
         <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <!-- Stock Disponible -->
             <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 flex items-center gap-5 hover:border-emerald-300 transition-colors">
@@ -125,6 +205,30 @@
                     <p class="text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">Trazabilidad</p>
                     <p class="text-3xl font-black text-slate-900">{kpis.movimientos_hoy} <span class="text-xs text-slate-400 font-medium">hoy</span></p>
                 </div>
+            </div>
+        </div>
+
+        <!-- Gráficos de Ventas -->
+        <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
+            <div class="flex items-center justify-between mb-6">
+                <div class="flex items-center gap-3">
+                    <div class="p-2.5 bg-sky-100 text-sky-600 rounded-xl">
+                        <TrendingUp size={20} />
+                    </div>
+                    <h2 class="text-lg font-bold text-slate-900">Ingresos por Ventas (Últimos 7 Días)</h2>
+                </div>
+            </div>
+            
+            <!-- Contenedor del Gráfico -->
+            <div class="w-full h-72">
+                {#if ventas7Dias.length === 0}
+                    <div class="w-full h-full flex flex-col items-center justify-center text-slate-400">
+                        <BarChart3 size={40} class="mb-2 opacity-20" />
+                        <p class="text-sm font-medium">No hay datos de ventas recientes</p>
+                    </div>
+                {:else}
+                    <canvas bind:this={canvasGrafico}></canvas>
+                {/if}
             </div>
         </div>
 

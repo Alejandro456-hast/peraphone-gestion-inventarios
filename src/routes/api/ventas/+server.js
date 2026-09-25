@@ -138,3 +138,19 @@ export async function POST({ request }) {
         );
     }
 }
+
+
+export async function GET({ url }) {
+    try {
+        const ventas = await ejecutarConsulta(`
+            SELECT v.id_venta, v.fecha_venta, v.nombre_cliente, v.documento_cliente, v.precio_venta_final, v.observaciones, c.marca, c.modelo, c.numero_imei, u.nombre_completo AS vendedor 
+            FROM ventas v 
+            LEFT JOIN celulares c ON v.id_celular = c.id_celular 
+            LEFT JOIN usuarios u ON v.id_usuario_vendedor = u.id_usuario 
+            ORDER BY v.fecha_venta DESC
+        `);
+        return json({ exito: true, datos: ventas });
+    } catch (error) {
+        return json({ exito: false, mensaje: 'Error al obtener ventas.' }, { status: 500 });
+    }
+}

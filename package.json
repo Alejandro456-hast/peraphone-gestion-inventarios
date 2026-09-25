@@ -35,6 +35,9 @@
 	},
 	"dependencies": {
 		"@lucide/svelte": "^1.48.0",
-		"mysql2": "^3.24.4"
+		"chart.js": "^4.5.1",
+		"jspdf": "^4.2.1",
+		"mysql2": "^3.24.4",
+		"xlsx": "^0.18.5"
 	}
 }

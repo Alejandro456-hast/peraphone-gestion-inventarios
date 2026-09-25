@@ -133,17 +133,80 @@
             } else {
                 mostrarAlerta('exito', `¡Venta procesada con éxito! Se descontaron ${carrito.length} equipos del stock.`);
                 
-                // Generar un comprobante visual (Impresión simulada)
+                // Generar comprobante en PDF (Formato Ticket Térmico 80mm)
                 setTimeout(() => {
-                    alert(`COMPROBANTE DE VENTA\n\nCliente: ${nombre_cliente}\nTotal: $${totalCarrito.toFixed(2)}\nEquipos: ${carrito.length}\n\nGracias por su compra en PERAPHONE.`);
-                    
-                    // Limpiar formulario y carrito
-                    carrito = [];
-                    nombre_cliente = '';
-                    documento_cliente = '';
-                    observaciones = '';
-                    cargarStock(); // RN-006: Refrescar catálogo para no vender fantasmas
-                }, 500);
+                    import('jspdf').then(({ jsPDF }) => {
+                        const doc = new jsPDF({
+                            orientation: 'portrait',
+                            unit: 'mm',
+                            format: [80, 200]
+                        });
+
+                        doc.setFontSize(14);
+                        doc.setFont('helvetica', 'bold');
+                        doc.text('PERAPHONE', 40, 10, { align: 'center' });
+                        
+                        doc.setFontSize(9);
+                        doc.setFont('helvetica', 'normal');
+                        doc.text('Comprobante de Venta', 40, 16, { align: 'center' });
+                        doc.text(new Date().toLocaleString(), 40, 21, { align: 'center' });
+                        
+                        doc.line(5, 25, 75, 25);
+                        
+                        doc.text('Cliente: ' + nombre_cliente, 5, 30);
+                        doc.text('Doc/NIT: ' + documento_cliente, 5, 35);
+                        if(observaciones) {
+                            doc.text('Obs: ' + observaciones.substring(0,25), 5, 40);
+                            doc.line(5, 43, 75, 43);
+                        } else {
+                            doc.line(5, 40, 75, 40);
+                        }
+                        
+                        doc.setFont('helvetica', 'bold');
+                        doc.text('CANT', 5, 47);
+                        doc.text('DESCRIPCION', 18, 47);
+                        doc.text('TOTAL', 60, 47);
+                        
+                        doc.setFont('helvetica', 'normal');
+                        doc.line(5, 49, 75, 49);
+                        
+                        let y = 54;
+                        carrito.forEach((item) => {
+                            doc.text('1', 7, y);
+                            let desc = (item.marca + ' ' + item.modelo).substring(0, 18);
+                            doc.text(desc, 18, y);
+                            doc.text('$' + Number(item.precio_venta_final).toFixed(2), 60, y);
+                            y += 5;
+                            doc.setFontSize(7);
+                            doc.text('IMEI: ' + item.numero_imei, 18, y);
+                            doc.setFontSize(9);
+                            y += 6;
+                        });
+                        
+                        doc.line(5, y, 75, y);
+                        y += 5;
+                        
+                        doc.setFontSize(11);
+                        doc.setFont('helvetica', 'bold');
+                        doc.text('TOTAL A PAGAR:', 5, y);
+                        doc.text('$' + totalCarrito.toFixed(2), 48, y);
+                        
+                        y += 10;
+                        doc.setFontSize(8);
+                        doc.setFont('helvetica', 'normal');
+                        doc.text('¡Gracias por su compra!', 40, y, { align: 'center' });
+                        doc.text('El equipo cuenta con 30 días de garantía.', 40, y + 4, { align: 'center' });
+                        
+                        doc.save(`Ticket_Venta_${documento_cliente}_${Date.now()}.pdf`);
+
+                        // Limpiar formulario y carrito
+                        carrito = [];
+                        nombre_cliente = '';
+                        documento_cliente = '';
+                        observaciones = '';
+                        cargarStock(); // Refrescar stock
+                    });
+                }, 300);
             }
         } catch (error) {
             mostrarAlerta('error', 'Error crítico al comunicarse con el servidor de ventas.');
